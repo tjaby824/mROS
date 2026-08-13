@@ -16,7 +16,7 @@ REPO_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 # shellcheck source=config.env
 source "$SCRIPT_DIR/config.env"
 
-PHASES=(base ros libtorch platformio vscode agent trainer shell)
+PHASES=(base ros libtorch platformio link vscode agent trainer shell)
 # sudo가 실제로 필요한 단계. 나머지는 전부 $HOME 안에서만 작업하므로
 # 암호를 요구하지 않는다(./setup.sh shell 하나 돌리려고 sudo를 묻지 않도록).
 SUDO_PHASES=(base ros platformio)
@@ -114,7 +114,7 @@ preflight() {
 
 # --- 1. 기본 패키지 + 로케일 --------------------------------------------------
 phase_base() {
-  c_step "1/8  기본 패키지와 로케일"
+  c_step "1/9  기본 패키지와 로케일"
 
   sudo apt-get update -qq
   sudo apt-get install -y -qq \
@@ -135,7 +135,7 @@ phase_base() {
 
 # --- 2. ROS 2 + 빌드 툴체인 ---------------------------------------------------
 phase_ros() {
-  c_step "2/8  ROS 2 ${ROS_DISTRO_NAME} 와 빌드 툴체인"
+  c_step "2/9  ROS 2 ${ROS_DISTRO_NAME} 와 빌드 툴체인"
 
   need_cmds curl:curl add-apt-repository:software-properties-common
 
@@ -184,7 +184,7 @@ phase_ros() {
 
 # --- 3. LibTorch --------------------------------------------------------------
 phase_libtorch() {
-  c_step "3/8  LibTorch ${LIBTORCH_VERSION} (CPU, cxx11-ABI)"
+  c_step "3/9  LibTorch ${LIBTORCH_VERSION} (CPU, cxx11-ABI)"
 
   need_cmds wget:wget unzip:unzip
 
@@ -212,7 +212,7 @@ phase_libtorch() {
 
 # --- 4. PlatformIO + 장치 권한 ------------------------------------------------
 phase_platformio() {
-  c_step "4/8  PlatformIO 와 USB 장치 권한"
+  c_step "4/9  PlatformIO 와 USB 장치 권한"
 
   need_cmds curl:curl python3:python3
 
@@ -250,9 +250,47 @@ phase_platformio() {
   return 0
 }
 
-# --- 5. VSCode + PlatformIO IDE ------------------------------------------------
+# --- 5. 홈 디렉터리 심링크 --------------------------------------------------
+phase_link() {
+  c_step "5/9  ~/Documents/PlatformIO 심링크"
+
+  # 저장소의 Documents/PlatformIO/... 는 홈 아래 같은 경로를 가리키는 이름이다.
+  # 실제로 복사하지 않고 심링크로 잇는다 — 그래야 편집이 git 안에서 이뤄지고
+  # .pio 캐시(수백 MB)도 한 군데에만 쌓인다.
+  local src_base="${REPO_ROOT}/Documents/PlatformIO"
+  local dst_base="$HOME/Documents/PlatformIO"
+
+  # 클론이 목적지 안에 있으면 자기 자신을 가리키게 되므로 만들지 않는다.
+  case "${REPO_ROOT}/" in
+    "$dst_base"/*)
+      c_warn "저장소가 ${dst_base} 안에 있어 심링크를 만들지 않는다.
+       클론을 그 바깥(예: ~/mROS)에 두면 심링크가 생성된다.
+       지금도 ${src_base} 에서 그대로 빌드할 수 있다."
+      return 0 ;;
+  esac
+
+  mkdir -p "$dst_base"
+  local name target
+  for name in mROS examples; do
+    target="$src_base/$name"
+    [[ -e "$target" ]] || continue
+
+    if [[ -L "$dst_base/$name" ]]; then
+      ln -sfn "$target" "$dst_base/$name"          # 링크면 갱신
+      c_ok "$dst_base/$name → $target"
+    elif [[ -e "$dst_base/$name" ]]; then
+      c_warn "$dst_base/$name 가 이미 실제 폴더로 존재한다. 건드리지 않는다.
+       저장소 쪽을 쓰려면 옮기거나 지운 뒤 './setup.sh link'를 다시 실행할 것."
+    else
+      ln -s "$target" "$dst_base/$name"
+      c_ok "$dst_base/$name → $target"
+    fi
+  done
+}
+
+# --- 6. VSCode + PlatformIO IDE ------------------------------------------------
 phase_vscode() {
-  c_step "5/8  VSCode 와 PlatformIO IDE 확장"
+  c_step "6/9  VSCode 와 PlatformIO IDE 확장"
 
   if ! command -v code >/dev/null 2>&1; then
     c_warn "VSCode(code)가 없다. 펌웨어는 터미널(pio run -t upload)로도 올릴 수 있으므로
@@ -271,12 +309,12 @@ phase_vscode() {
     c_ok "PlatformIO IDE 확장"
   fi
 
-  c_ok "VSCode 준비됨 — 열 폴더는 ${REPO_ROOT}/firmware (저장소 루트가 아니다)"
+  c_ok "VSCode 준비됨 — 열 폴더는 ${REPO_ROOT}/Documents/PlatformIO/mROS"
 }
 
 # --- 6. micro-ROS 에이전트 ----------------------------------------------------
 phase_agent() {
-  c_step "6/8  micro-ROS 에이전트"
+  c_step "7/9  micro-ROS 에이전트"
 
   src_ros "/opt/ros/${ROS_DISTRO_NAME}/setup.bash"
 
@@ -312,7 +350,7 @@ phase_agent() {
 
 # --- 6. 트레이너 --------------------------------------------------------------
 phase_trainer() {
-  c_step "7/8  sac_trainer_cpp 트레이너"
+  c_step "8/9  sac_trainer_cpp 트레이너"
 
   src_ros "/opt/ros/${ROS_DISTRO_NAME}/setup.bash"
 
@@ -346,7 +384,7 @@ phase_trainer() {
 
 # --- 7. 셸 환경 ---------------------------------------------------------------
 phase_shell() {
-  c_step "8/8  셸 환경 (.bashrc, venv)"
+  c_step "9/9  셸 환경 (.bashrc, venv)"
 
   if [[ -d "${VENV_DIR}" ]]; then
     c_skip "venv ${VENV_DIR}"

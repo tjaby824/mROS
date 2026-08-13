@@ -35,14 +35,17 @@
 
 클론한 뒤 **대부분은 제자리에서 쓴다.** 다른 곳으로 가는 건 트레이너 하나뿐이다.
 
-| 폴더 | 목적지 |
-|---|---|
-| `setup/` | 이동 없음 — 여기서 `./setup.sh` 실행 |
-| `firmware/` | 이동 없음 — VSCode로 **이 폴더**를 연다 |
-| `ros2_ws/src/sac_trainer_cpp/` | **→ `~/ros2_ws/src/`** (`setup.sh trainer`가 복사) |
-| `examples/` | 이동 없음 — 참고용, 설치에 불필요 |
+**저장소 경로가 곧 홈 디렉터리 경로다.**
 
-저장소의 `ros2_ws/`는 목적지 경로를 그대로 따른 이름이다. 클론 위치는 어디든 상관없다.
+| 저장소 | 홈 디렉터리 | 방식 |
+|---|---|---|
+| `Documents/PlatformIO/mROS/` | `~/Documents/PlatformIO/mROS` | 심링크 |
+| `Documents/PlatformIO/examples/` | `~/Documents/PlatformIO/examples` | 심링크 |
+| `ros2_ws/src/sac_trainer_cpp/` | `~/ros2_ws/src/sac_trainer_cpp` | 복사 |
+| `setup/` | — | 이동 없음 |
+
+심링크는 `setup.sh link`가 만들고, 트레이너만 복사된다(colcon이 워크스페이스 안을
+봐야 하기 때문). **클론은 `~/Documents/PlatformIO` 바깥에 둔다** — 예: `~/mROS`.
 
 ---
 
@@ -75,7 +78,7 @@ unzip mROS-main.zip && cd mROS-main/setup && chmod +x *.sh
 ./setup.sh
 ```
 
-기본 패키지·로케일·ROS 2 Jazzy·colcon·LibTorch·PlatformIO·VSCode 확장·micro-ROS 에이전트·트레이너·셸 환경이 전부 여기 들어 있다. 8단계로 나뉘어 있고 **재실행해도 안전하다** — 이미 된 단계는 건너뛴다.
+기본 패키지·로케일·ROS 2 Jazzy·colcon·LibTorch·PlatformIO·VSCode 확장·micro-ROS 에이전트·트레이너·셸 환경이 전부 여기 들어 있다. 9단계로 나뉘어 있고 **재실행해도 안전하다** — 이미 된 단계는 건너뛴다.
 
 처음 실행은 오래 걸린다. LibTorch 500MB 다운로드와 micro-ROS 에이전트 빌드가 대부분을 차지한다.
 
@@ -106,6 +109,7 @@ unzip mROS-main.zip && cd mROS-main/setup && chmod +x *.sh
 | `ros` | ROS 2 Jazzy, colcon, rosdep | 이후 모든 clone이 `$ROS_DISTRO`로 브랜치를 고른다. **colcon은 시스템에** 깔린다 — venv 안에 pip으로 깔면 venv를 끈 순간 `command not found` |
 | `libtorch` | LibTorch 2.4.0 CPU → `~/libtorch` | cxx11-ABI가 아니면 ROS 2와 링크가 안 된다. 경로는 `config.env`의 `LIBTORCH_DIR`로 바꿀 수 있다 |
 | `platformio` | PlatformIO, udev 규칙, `dialout`/`plugdev` | Teensy 업로드에 USB 접근 권한이 필요하다 |
+| `link` | `~/Documents/PlatformIO/{mROS,examples}` 심링크 | 복사가 아니라 링크라 편집이 git 안에서 이뤄지고 `.pio` 캐시가 한 곳에만 쌓인다 |
 | `vscode` | PlatformIO IDE 확장 설치 | VSCode가 없으면 안내만 하고 넘어간다(터미널로도 업로드 가능) |
 | `agent` | `micro_ros_setup` → `create_agent_ws.sh` → `build_agent.sh` | `micro_ros_agent`는 XRCE-DDS 엔진을 별도 패키지로 찾는다. `micro-ROS-Agent` 저장소만 clone하면 엔진이 없어 `find_package`에서 멈춘다 |
 | `trainer` | `ros2_ws/src/sac_trainer_cpp`를 `~/ros2_ws/src/`로 복사 후 colcon 빌드 | 저장소 안 경로가 목적지 경로와 같다 |
@@ -152,11 +156,11 @@ Teensy를 USB로 연결하고, 이더넷도 함께 물려둔다.
 
 ### VSCode (권장)
 
-**여는 폴더는 저장소 루트가 아니라 `firmware/`다.** PlatformIO는 `platformio.ini`가
+**여는 폴더는 저장소 루트가 아니라 `Documents/PlatformIO/mROS`다.** PlatformIO는 `platformio.ini`가
 있는 폴더를 프로젝트로 인식한다. 루트를 열면 프로젝트를 못 찾아 툴바가 나타나지 않는다.
 
 ```bash
-code firmware
+code ~/Documents/PlatformIO/mROS
 ```
 
 1. 왼쪽 사이드바에 **개미 머리 아이콘**(PlatformIO)이 생기고, 하단에 파란 상태바가 뜬다.
@@ -174,7 +178,7 @@ code firmware
 ### 터미널
 
 ```bash
-cd firmware
+cd ~/Documents/PlatformIO/mROS
 pio run -e teensy41 -t upload
 ```
 
@@ -281,7 +285,7 @@ ros2 topic echo /policy_ack              # 5. 트레이너 기동 후 가중치 
 | Teensy 업로드 권한 거부 | 그룹이 세션에 미적용 | **로그아웃 → 재로그인**. 터미널만 닫으면 안 된다 |
 | 에이전트는 붙는데 토픽이 안 보임 | 도메인 불일치 | `echo $ROS_DOMAIN_ID` → 121 |
 | `ping` 실패 | PC NIC IP 불일치 | 3절 (`192.168.1.12/24`) |
-| `rclc pull failed` / `Aborting` | micro-ROS 저장소 캐시 충돌 | `cd firmware && pio run -t clean_microros` 후 재빌드 |
+| `rclc pull failed` / `Aborting` | micro-ROS 저장소 캐시 충돌 | `cd ~/Documents/PlatformIO/mROS && pio run -t clean_microros` 후 재빌드 |
 | `file INSTALL cannot find lib*.a` | micro-ROS 라이브러리 빌드 레이스 | `pio run`을 한 번 더. 대개 이어서 통과한다 |
 
 ---
@@ -290,7 +294,7 @@ ros2 topic echo /policy_ack              # 5. 트레이너 기동 후 가중치 
 
 | 이전 | 현재 |
 |---|---|
-| `Projects/StTn` | `firmware/` |
+| `Projects/StTn` | `Documents/PlatformIO/mROS/` (심링크로 홈에 연결) |
 | `sac3.cpp`가 `lib/`에 있어 `ln -sf` 심링크 필요 | `src/sac3.cpp`에 있음 — 심링크 불필요 |
 | `pio run -e baseline -t upload` | `pio run -e teensy41 -t upload` |
 | `-e e0_eigen` / `-e e0_forloop` 백엔드 | 해당 env 제거 (참조하던 `e0_backends.cpp`가 존재하지 않았음) |
