@@ -1,0 +1,3 @@
+[submodule "micro_ros_arduino_examples_platformio"]
+	path = micro_ros_arduino_examples_platformio
+	url = https://github.com/hippo5329/micro_ros_arduino_examples_platformio.git
