@@ -16,17 +16,26 @@ setup/                                  설치 자동화
   verify.sh                             설치 확인
   config.env                            IP · 도메인 · 버전 — 여기만 고치면 된다
 
+trainer/sac_trainer_cpp/                PC 학습 노드 (LibTorch SAC)
+  src/sac_trainer_node.cpp              dual_sac 실행 파일
+  src/HiLH.cpp                          hilh 실행 파일
+  scripts/run_*.sh                       학습 실행 스크립트
+
 micro_ros_arduino_examples_platformio/  참고용 예제 (서브모듈, hippo5329)
 ```
 
-트레이너(`sac_trainer_cpp`)는 별도 저장소인 [`tjaby824/ros2_ws`](https://github.com/tjaby824/ros2_ws)에 있고,
-`setup.sh`가 받아서 빌드한다.
+`setup.sh`가 `trainer/sac_trainer_cpp`를 `~/ros2_ws/src/`로 복사해 빌드한다.
+별도 저장소를 받을 필요가 없다.
 
 ## 시작하기
 
 ```bash
+# git (권장)
 git clone --recurse-submodules https://github.com/tjaby824/mROS.git
 cd mROS/setup
+
+# 또는 zip 다운로드 후
+unzip mROS-main.zip && cd mROS-main/setup && chmod +x *.sh
 ```
 
 `config.env`에서 IP를 환경에 맞게 고친 뒤:

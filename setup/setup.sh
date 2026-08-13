@@ -12,10 +12,14 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 # shellcheck source=config.env
 source "$SCRIPT_DIR/config.env"
 
-PHASES=(base ros libtorch platformio agent trainer shell)
+PHASES=(base ros libtorch platformio vscode agent trainer shell)
+# sudo가 실제로 필요한 단계. 나머지는 전부 $HOME 안에서만 작업하므로
+# 암호를 요구하지 않는다(./setup.sh shell 하나 돌리려고 sudo를 묻지 않도록).
+SUDO_PHASES=(base ros platformio)
 
 # ROS의 setup.bash / local_setup.bash 는 nounset(set -u) 환경에서 깨진다.
 # 내부에서 AMENT_TRACE_SETUP_FILES 같은 미정의 변수를 참조하기 때문.
@@ -35,6 +39,7 @@ BASHRC_BEGIN='# >>> rsrl stack (managed by setup.sh) >>>'
 BASHRC_END='# <<< rsrl stack (managed by setup.sh) <<<'
 
 # --- 사전 점검 ---------------------------------------------------------------
+# $@ = 이번에 돌릴 단계 목록
 preflight() {
   [[ $EUID -eq 0 ]] && c_die "root로 실행하지 말 것. 필요한 곳에서만 sudo를 쓴다.
        (root로 돌리면 ~/libtorch, ~/.platformio 가 root 소유가 되어 나중에 깨진다)"
@@ -48,14 +53,36 @@ preflight() {
   [[ "${VERSION_CODENAME:-}" == "noble" ]] \
     || c_warn "Ubuntu 24.04(noble) 기준으로 작성됨. 현재: ${PRETTY_NAME:-unknown}"
 
-  command -v sudo >/dev/null || c_die "sudo가 없다."
-  echo "sudo 권한을 미리 확인한다 (설치 중 암호 재입력을 피하기 위함)"
-  sudo -v
+  # zip으로 받으면 실행 비트가 보존되지 않는다. bash로 호출하면 여기까지 오므로
+  # 나머지 스크립트에도 실행 권한을 붙여 verify.sh 등이 바로 돌게 한다.
+  chmod +x "$SCRIPT_DIR"/*.sh 2>/dev/null || true
+
+  # 서브모듈은 예제 참고용일 뿐 설치에 필요 없다. zip 경로에선 비어 있는 게 정상이므로
+  # 경고만 하고 진행한다.
+  if [[ -d "${REPO_ROOT}/micro_ros_arduino_examples_platformio" ]] \
+     && [[ -z "$(ls -A "${REPO_ROOT}/micro_ros_arduino_examples_platformio" 2>/dev/null)" ]]; then
+    c_warn "예제 서브모듈이 비어 있다(zip으로 받으면 정상). 설치에는 영향 없다.
+       필요하면: git submodule update --init"
+  fi
+
+  # 이번 실행에 sudo가 필요한 단계가 하나라도 있을 때만 미리 확인한다.
+  local needs_sudo=0 p q
+  for p in "$@"; do
+    for q in "${SUDO_PHASES[@]}"; do
+      [[ "$p" == "$q" ]] && needs_sudo=1
+    done
+  done
+
+  if [[ $needs_sudo -eq 1 ]]; then
+    command -v sudo >/dev/null || c_die "sudo가 없다."
+    echo "sudo 권한을 미리 확인한다 (설치 중 암호 재입력을 피하기 위함)"
+    sudo -v || c_die "sudo 인증 실패."
+  fi
 }
 
 # --- 1. 기본 패키지 + 로케일 --------------------------------------------------
 phase_base() {
-  c_step "1/7  기본 패키지와 로케일"
+  c_step "1/8  기본 패키지와 로케일"
 
   sudo apt-get update -qq
   sudo apt-get install -y -qq \
@@ -76,7 +103,7 @@ phase_base() {
 
 # --- 2. ROS 2 + 빌드 툴체인 ---------------------------------------------------
 phase_ros() {
-  c_step "2/7  ROS 2 ${ROS_DISTRO_NAME} 와 빌드 툴체인"
+  c_step "2/8  ROS 2 ${ROS_DISTRO_NAME} 와 빌드 툴체인"
 
   if [[ -d "/opt/ros/${ROS_DISTRO_NAME}" ]]; then
     c_skip "ROS 2 ${ROS_DISTRO_NAME}"
@@ -123,7 +150,7 @@ phase_ros() {
 
 # --- 3. LibTorch --------------------------------------------------------------
 phase_libtorch() {
-  c_step "3/7  LibTorch ${LIBTORCH_VERSION} (CPU, cxx11-ABI)"
+  c_step "3/8  LibTorch ${LIBTORCH_VERSION} (CPU, cxx11-ABI)"
 
   # sac_trainer_cpp/CMakeLists.txt가 CMAKE_PREFIX_PATH를 $HOME/libtorch로
   # 고정한다. 다른 경로에 풀면 find_package(Torch)가 실패한다.
@@ -149,7 +176,7 @@ phase_libtorch() {
 
 # --- 4. PlatformIO + 장치 권한 ------------------------------------------------
 phase_platformio() {
-  c_step "4/7  PlatformIO 와 USB 장치 권한"
+  c_step "4/8  PlatformIO 와 USB 장치 권한"
 
   if [[ -x "$HOME/.platformio/penv/bin/pio" ]]; then
     c_skip "PlatformIO"
@@ -185,9 +212,33 @@ phase_platformio() {
   return 0
 }
 
-# --- 5. micro-ROS 에이전트 ----------------------------------------------------
+# --- 5. VSCode + PlatformIO IDE ------------------------------------------------
+phase_vscode() {
+  c_step "5/8  VSCode 와 PlatformIO IDE 확장"
+
+  if ! command -v code >/dev/null 2>&1; then
+    c_warn "VSCode(code)가 없다. 펌웨어는 터미널(pio run -t upload)로도 올릴 수 있으므로
+       설치를 강제하지 않는다. VSCode로 쓰려면 먼저 설치한 뒤 이 단계를 다시 실행할 것:
+         ./setup.sh vscode"
+    return 0
+  fi
+
+  # extensions.json이 이 확장을 recommend 하므로 폴더를 열면 VSCode도 제안하지만,
+  # 미리 깔아두면 참조자가 제안 팝업을 놓쳐도 바로 쓸 수 있다.
+  if code --list-extensions 2>/dev/null | grep -qx 'platformio.platformio-ide'; then
+    c_skip "PlatformIO IDE 확장"
+  else
+    code --install-extension platformio.platformio-ide --force >/dev/null \
+      || c_warn "확장 설치 실패. VSCode에서 수동으로 'PlatformIO IDE'를 설치할 것."
+    c_ok "PlatformIO IDE 확장"
+  fi
+
+  c_ok "VSCode 준비됨 — 열 폴더는 ${REPO_ROOT}/Projects/mROS (저장소 루트가 아니다)"
+}
+
+# --- 6. micro-ROS 에이전트 ----------------------------------------------------
 phase_agent() {
-  c_step "5/7  micro-ROS 에이전트"
+  c_step "6/8  micro-ROS 에이전트"
 
   src_ros "/opt/ros/${ROS_DISTRO_NAME}/setup.bash"
 
@@ -221,34 +272,26 @@ phase_agent() {
 
 # --- 6. 트레이너 --------------------------------------------------------------
 phase_trainer() {
-  c_step "6/7  sac_trainer_cpp 트레이너"
+  c_step "7/8  sac_trainer_cpp 트레이너"
 
   src_ros "/opt/ros/${ROS_DISTRO_NAME}/setup.bash"
 
-  if [[ ! -d "${WORKSPACE}/src/sac_trainer_cpp" ]]; then
-    echo "  트레이너를 받는다: ${TRAINER_REPO}"
-    local tmp
-    tmp="$(mktemp -d)"
-    if ! git clone --depth 1 "${TRAINER_REPO}" "$tmp/ws" 2>/dev/null; then
-      rm -rf "$tmp"
-      c_die "트레이너 저장소 clone 실패: ${TRAINER_REPO}
-       비공개 저장소라면 접근 권한이 필요하다:
-         gh auth login          (GitHub CLI로 인증)
-       또는 소유자에게 collaborator 추가를 요청할 것.
-       수동 배치도 가능하다: ${WORKSPACE}/src/sac_trainer_cpp 에
-       scripts/ 를 포함해 통째로 복사한 뒤 이 단계를 다시 실행."
-    fi
-    mkdir -p "${WORKSPACE}/src"
-    cp -r "$tmp/ws/src/sac_trainer_cpp" "${WORKSPACE}/src/sac_trainer_cpp"
-    rm -rf "$tmp"
-    c_ok "트레이너 소스 배치"
-  else
-    c_skip "트레이너 소스"
-  fi
+  # 트레이너 소스는 이 저장소 안에 있다. 별도 clone이 필요 없다.
+  local repo_src="${REPO_ROOT}/trainer/sac_trainer_cpp"
+  local ws_src="${WORKSPACE}/src/sac_trainer_cpp"
+
+  [[ -d "$repo_src" ]] || c_die "트레이너 소스가 없다: $repo_src
+       저장소를 통째로 받았는지 확인할 것 (zip이라면 압축을 다 풀었는지)."
+
+  # colcon은 워크스페이스 src/ 아래를 본다. 저장소에서 그리로 복사한다.
+  # 재실행 시 저장소 쪽이 정본이므로 항상 덮어쓴다(런타임 출력은 scripts/ 아래에
+  # 쌓이므로 --delete 없이 복사해 체크포인트를 보존한다).
+  mkdir -p "${WORKSPACE}/src"
+  cp -r "$repo_src" "${WORKSPACE}/src/"
+  c_ok "트레이너 소스 배치 → $ws_src"
 
   # CMakeLists가 install(DIRECTORY scripts/ ...)를 하므로 scripts/가 없으면 빌드가 실패한다.
-  [[ -d "${WORKSPACE}/src/sac_trainer_cpp/scripts" ]] \
-    || c_die "sac_trainer_cpp/scripts/ 가 없다. 패키지를 통째로 다시 배치할 것."
+  [[ -d "$ws_src/scripts" ]] || c_die "$ws_src/scripts/ 가 없다. 저장소가 온전한지 확인할 것."
 
   cd "${WORKSPACE}"
   rosdep install --from-paths src --ignore-src -y >/dev/null
@@ -256,13 +299,13 @@ phase_trainer() {
   colcon build --symlink-install --packages-select sac_trainer_cpp \
     --cmake-args "-DCMAKE_PREFIX_PATH=${LIBTORCH_DIR}"
 
-  chmod +x "${WORKSPACE}/src/sac_trainer_cpp/scripts/"*.sh
+  chmod +x "$ws_src/scripts/"*.sh
   c_ok "sac_trainer_cpp"
 }
 
 # --- 7. 셸 환경 ---------------------------------------------------------------
 phase_shell() {
-  c_step "7/7  셸 환경 (.bashrc, venv)"
+  c_step "8/8  셸 환경 (.bashrc, venv)"
 
   if [[ -d "${VENV_DIR}" ]]; then
     c_skip "venv ${VENV_DIR}"
@@ -336,7 +379,7 @@ main() {
     done
   fi
 
-  preflight
+  preflight "${run[@]}"
   for p in "${run[@]}"; do
     "phase_$p"
   done

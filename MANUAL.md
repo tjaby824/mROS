@@ -32,9 +32,16 @@
 ## 1. 빠른 경로
 
 ```bash
+# 경로 A — git (권장)
 git clone --recurse-submodules https://github.com/tjaby824/mROS.git
 cd mROS/setup
+
+# 경로 B — zip 다운로드
+unzip mROS-main.zip && cd mROS-main/setup && chmod +x *.sh
 ```
+
+> zip으로 받으면 실행 비트가 보존되지 않아 `chmod +x`가 필요하다(`bash setup.sh`로 실행해도 된다).
+> 예제 서브모듈도 zip에는 포함되지 않는데, 참고용일 뿐이라 설치에는 영향이 없다.
 
 `config.env`에서 IP를 본인 환경에 맞게 고친 뒤:
 
@@ -69,10 +76,11 @@ STEP 0~8에 해당하는 설치가 전부 여기 들어 있다(기본 패키지�
 |---|---|---|
 | `base` | apt 기본 패키지, UTF-8 로케일 | ROS 2는 UTF-8을 전제한다. 안 맞으면 빌드 중 인코딩 에러 |
 | `ros` | ROS 2 Jazzy, colcon, rosdep | 이후 모든 clone이 `$ROS_DISTRO`로 브랜치를 고른다. **colcon은 시스템에** 깔린다 — venv 안에 pip으로 깔면 venv를 끈 순간 `command not found` |
-| `libtorch` | LibTorch 2.4.0 CPU → `~/libtorch` | `sac_trainer_cpp/CMakeLists.txt`가 이 경로로 **고정**돼 있다. cxx11-ABI가 아니면 ROS 2와 링크가 안 된다 |
+| `libtorch` | LibTorch 2.4.0 CPU → `~/libtorch` | cxx11-ABI가 아니면 ROS 2와 링크가 안 된다. 경로는 `config.env`의 `LIBTORCH_DIR`로 바꿀 수 있다 |
 | `platformio` | PlatformIO, udev 규칙, `dialout`/`plugdev` | Teensy 업로드에 USB 접근 권한이 필요하다 |
+| `vscode` | PlatformIO IDE 확장 설치 | VSCode가 없으면 안내만 하고 넘어간다(터미널로도 업로드 가능) |
 | `agent` | `micro_ros_setup` → `create_agent_ws.sh` → `build_agent.sh` | `micro_ros_agent`는 XRCE-DDS 엔진을 별도 패키지로 찾는다. `micro-ROS-Agent` 저장소만 clone하면 엔진이 없어 `find_package`에서 멈춘다 |
-| `trainer` | 트레이너 clone + colcon 빌드 | CMakeLists가 `install(DIRECTORY scripts/ ...)`를 하므로 `scripts/`가 없으면 빌드가 실패한다 |
+| `trainer` | 저장소의 `trainer/sac_trainer_cpp`를 `~/ros2_ws/src/`로 복사 후 colcon 빌드 | 트레이너가 이 저장소 안에 있으므로 별도 clone이 필요 없다 |
 | `shell` | `.bashrc` 블록, `rsrl` alias, venv | venv는 **실행용**이지 빌드용이 아니다. 그래서 마지막에 온다 |
 
 두 가지를 짚어둔다.
@@ -81,7 +89,7 @@ STEP 0~8에 해당하는 설치가 전부 여기 들어 있다(기본 패키지�
 
 **`.bashrc`는 마커 블록으로 관리된다.** 손으로 append 하면 재실행할 때마다 `LD_LIBRARY_PATH`가 중복으로 쌓인다. 스크립트는 `# >>> rsrl stack ... >>>` 블록을 통째로 갈아끼운다.
 
-> **트레이너 저장소 접근** — `sac_trainer_cpp`는 `tjaby824/ros2_ws`에 있다. 비공개 저장소이므로 다른 사람이 clone하려면 `gh auth login`으로 인증돼 있거나 collaborator로 추가돼 있어야 한다. 안 되면 `trainer` 단계가 그 안내와 함께 멈춘다.
+**트레이너는 이 저장소 안에 있다.** `trainer/sac_trainer_cpp/`가 정본이고, `trainer` 단계가 이를 `~/ros2_ws/src/`로 복사해 빌드한다. 코드를 고칠 때는 저장소 쪽을 고치고 `./setup.sh trainer`를 다시 돌린다.
 
 ---
 
@@ -105,16 +113,39 @@ ping -c3 192.168.1.10
 
 ---
 
-## 4. 펌웨어
+## 4. 펌웨어 업로드
+
+Teensy를 USB로 연결하고, 이더넷도 함께 물려둔다.
+
+### VSCode (권장)
+
+**여는 폴더는 저장소 루트가 아니라 `Projects/mROS`다.** PlatformIO는 `platformio.ini`가
+있는 폴더를 프로젝트로 인식한다. 루트를 열면 프로젝트를 못 찾아 툴바가 나타나지 않는다.
+
+```bash
+code Projects/mROS
+```
+
+1. 왼쪽 사이드바에 **개미 머리 아이콘**(PlatformIO)이 생기고, 하단에 파란 상태바가 뜬다.
+   확장이 없으면 VSCode가 설치를 제안한다(`.vscode/extensions.json`에 등록돼 있다).
+   `setup.sh vscode`가 미리 깔아두기도 한다.
+2. 첫 실행은 micro-ROS 라이브러리를 통째로 받아 빌드하므로 **10분 이상** 걸린다.
+   하단 상태바가 계속 도는 것은 정상이다.
+3. 하단 상태바에서 환경이 **`env:teensy41`**인지 확인한다. 환경이 하나뿐이라 자동 선택된다.
+4. **✓ (체크)** 버튼 = 빌드, **→ (화살표)** 버튼 = 업로드.
+5. 업로드를 누르면 **Teensy Loader 창이 뜬다** (`upload_protocol = teensy-gui`).
+   자동 리부팅까지 처리되므로 보통은 그대로 두면 끝난다.
+   창이 뜨고 멈춰 있으면 **보드의 program 버튼을 한 번 누른다.**
+6. 시리얼 출력은 **플러그 아이콘**(Serial Monitor), 속도는 `115200`.
+
+### 터미널
 
 ```bash
 cd Projects/mROS
 pio run -e teensy41 -t upload
 ```
 
-첫 빌드는 micro-ROS 라이브러리를 통째로 받아 빌드하므로 오래 걸리고 네트워크가 필요하다. 이후는 1분 내외다.
-
-**확인**: `.pio/build/teensy41/firmware.hex` 생성, 그리고 `SUCCESS` 출력.
+**확인**: `.pio/build/teensy41/firmware.hex` 생성 + `SUCCESS` 출력.
 
 ### `platformio.ini`에서 건드리면 안 되는 것
 
@@ -122,9 +153,13 @@ pio run -e teensy41 -t upload
 board_microros_transport = custom
 ```
 
-**이게 빠지면 라이브러리가 기본값인 `serial`로 빌드된다.** `sac3.cpp`는 NativeEthernet UDP 트랜스포트를 직접 구현해 `rmw_uros_set_custom_transport()`로 등록하므로, 라이브러리가 트랜스포트를 하나 더 컴파일하면 안 된다.
+**이게 빠지면 라이브러리가 기본값인 `serial`로 빌드된다.** `sac3.cpp`는 NativeEthernet UDP
+트랜스포트를 직접 구현해 `rmw_uros_set_custom_transport()`로 등록하므로, 라이브러리가
+트랜스포트를 하나 더 컴파일하면 안 된다.
 
-트랜스포트는 **`board_microros_transport` 옵션으로만** 선택된다. `build_flags`에 `-D MICRO_ROS_TRANSPORT_...` 를 넣는 방식은 동작하지 않는다 — 실제 매크로는 라이브러리가 `MICRO_ROS_TRANSPORT_ARDUINO_<TRANSPORT>` 형태로 자동 생성한다.
+트랜스포트는 **`board_microros_transport` 옵션으로만** 선택된다. `build_flags`에
+`-D MICRO_ROS_TRANSPORT_...` 를 넣는 방식은 동작하지 않는다 — 실제 매크로는 라이브러리가
+`MICRO_ROS_TRANSPORT_ARDUINO_<TRANSPORT>` 형태로 자동 생성한다.
 
 빌드 로그 첫머리에서 확인할 수 있다:
 
@@ -134,27 +169,18 @@ Configuring teensy41 with transport custom
 
 `serial`이라고 나오면 위 옵션이 안 먹은 것이다.
 
-### 업로드 방식
-
-현재 `upload_protocol = teensy-gui`로, **Teensy Loader GUI 앱이 떠 있어야** 동작한다. 터미널만으로 끝내려면:
-
-```ini
-upload_protocol = teensy-cli
-```
-
-로 바꾼다. 이 경우 `dialout` 그룹이 현재 세션에 적용돼 있어야 한다(`verify.sh`가 검사한다).
-
----
-
 ## 5. 실행
 
-터미널 3개, 전부 `rsrl`로 연다.
+터미널 3개. 순서대로 연다 — **에이전트가 먼저 떠 있어야** 펌웨어 세션이 붙는다.
 
 ```bash
 # 터미널 1 — 에이전트
 rsrl
 ros2 run micro_ros_agent micro_ros_agent udp4 --port 8888      # 디버그는 -v6
 ```
+
+`-v6`로 띄우면 Teensy가 붙는 순간 `session established` 로그가 뜬다. 이게 안 보이면
+네트워크(3절)부터 다시 본다.
 
 ```bash
 # 터미널 2 — 확인
@@ -164,10 +190,24 @@ ros2 topic list        # rl_observation / encoder_feedback / episode_cmd_teensy
 
 ```bash
 # 터미널 3 — 학습
-rsrl
 cd ~/ros2_ws/src/sac_trainer_cpp/scripts
 ./run_dual_sac.sh                  # RULE+RL 교대
 # ./run_rl_only.sh                 # 체크포인트에서 RL 전용 이어하기
+```
+
+**`scripts/`로 반드시 `cd` 한 뒤 실행할 것.** `run_dual_sac.sh`는 출력 경로를
+`save_dir:=./sac_checkpoints`, `csv_dir:=./episode_logs`, `buffer_dir:=./replay_buffers`
+처럼 **상대경로**로 넘긴다. 다른 위치에서 돌리면 체크포인트와 로그가 그 위치에 쌓여
+다음 실행에서 이어붙지 않는다.
+
+터미널 3은 `rsrl`이 필요 없다 — `run_dual_sac.sh`가 자체적으로 `ROS_DOMAIN_ID=121`을
+export하고 `~/ros2_ws/install/setup.bash`를 source한다. 터미널 1·2는 `rsrl`이 필요하다.
+
+인자로 동작을 바꿀 수 있다 (기본값은 스크립트 상단 참조):
+
+```bash
+./run_dual_sac.sh 2000 2 30.0             # 에피소드 수, 난이도, sigma(deg)
+./run_dual_sac.sh 2000 2 30.0 <체크포인트>  # 체크포인트에서 이어하기
 ```
 
 ---
@@ -200,7 +240,7 @@ ros2 topic echo /policy_ack              # 5. 트레이너 기동 후 가중치 
 | `colcon: command not found` | venv 안에 colcon 설치 | `deactivate` 후 `./setup.sh ros` |
 | `git clone -b`이 엉뚱한 브랜치 | `$ROS_DISTRO` 비어 있음 | `source /opt/ros/jazzy/setup.bash` 먼저 |
 | `find_package(microxrcedds_agent)` 실패 | 에이전트를 수동 clone함 | `./setup.sh agent` (`micro_ros_setup` 경로) |
-| `find_package(Torch)` 실패 | LibTorch가 `~/libtorch`가 아님 | 경로 이동 (CMakeLists가 고정) |
+| `find_package(Torch)` 실패 | LibTorch 경로 불일치 | `config.env`의 `LIBTORCH_DIR` 확인 후 `./setup.sh trainer` |
 | `libtorch_cpu.so` 못 찾음 | `LD_LIBRARY_PATH` 미설정 | `./setup.sh shell` 후 새 셸 |
 | 링크 단계 ABI 에러 | pre-cxx11 LibTorch | cxx11-ABI 빌드로 교체 |
 | Teensy 업로드 권한 거부 | 그룹이 세션에 미적용 | **로그아웃 → 재로그인**. 터미널만 닫으면 안 된다 |
@@ -223,4 +263,7 @@ ros2 topic echo /policy_ack              # 5. 트레이너 기동 후 가중치 
 | `extra_configs = ../platformio/platformio.ini` | 제거 (예제 저장소 구조에서 온 잔재로, 경로가 깨져 있었음) |
 | 트랜스포트 지정 없음 (→ `serial`로 빌드) | `board_microros_transport = custom` |
 | STEP 0~8을 손으로 붙여넣기 | `./setup.sh` |
-| 첨부파일 3개 (`sac3.cpp`, `platformio.ini`, `sac_trainer_cpp.zip`) | 저장소 2개 clone |
+| 첨부파일 3개 (`sac3.cpp`, `platformio.ini`, `sac_trainer_cpp.zip`) | 저장소 **1개** clone (트레이너 포함) |
+| 트레이너가 별도 비공개 저장소 | `trainer/sac_trainer_cpp/`로 합침 |
+| VSCode 업로드 안내 없음 | 4절에 VSCode 절 추가 |
+| `CMakeLists.txt`가 `set(CMAKE_PREFIX_PATH ...)`로 덮어써 `LIBTORCH_DIR` 설정이 무시됨 | `list(APPEND ...)`로 수정 |

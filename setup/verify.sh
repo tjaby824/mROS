@@ -93,6 +93,17 @@ else
   no "udev 규칙" "→ setup.sh platformio"
 fi
 
+# VSCode는 선택 사항이다(터미널 업로드로 대체 가능) — 없으면 경고가 아니라 정보로 남긴다.
+if command -v code >/dev/null 2>&1; then
+  if code --list-extensions 2>/dev/null | grep -qx 'platformio.platformio-ide'; then
+    ok "VSCode PlatformIO IDE"
+  else
+    warn "VSCode PlatformIO IDE" "확장 미설치 → ./setup.sh vscode"
+  fi
+else
+  printf '\033[90m  · %-38s %s\033[0m\n' "VSCode" "미설치 (선택 사항 — 터미널 업로드 가능)"
+fi
+
 # id -nG는 그룹 DB를, groups는 '현재 세션'을 본다. usermod만 하고 재로그인을
 # 안 하면 둘이 어긋나고, 업로드는 세션 권한으로 동작하므로 실패한다.
 # 이 차이를 구분하지 않으면 '설정은 됐는데 업로드가 안 되는' 상태를 통과로 오판한다.
