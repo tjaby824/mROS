@@ -18,18 +18,31 @@
 
 | 항목 | 값 | 어디에 박혀 있나 |
 |---|---|---|
-| `ROS_DOMAIN_ID` | **121** | `sac3.cpp` 하드코딩, `run_dual_sac.sh`, `rsrl` alias |
-| 에이전트 포트 | **8888** (UDP4) | 펌웨어 `agent_port` |
-| Teensy IP | `192.168.1.10` | 펌웨어 `local_ip` |
-| PC IP | `192.168.1.12` | 펌웨어 `agent_ip` — **PC NIC에 직접 설정할 값** |
-| GW / 마스크 | `192.168.1.1` / `255.255.255.0` | 펌웨어 하드코딩 |
+| `ROS_DOMAIN_ID` | **121** | `sac3.cpp:662`, `run_dual_sac.sh:23`, `rsrl` alias |
+| 에이전트 포트 | **8888** (UDP4) | `sac3.cpp:362` `agent_port` |
+| Teensy IP | `192.168.1.10` | `sac3.cpp:363` `local_ip` |
+| PC IP | `192.168.1.12` | `sac3.cpp:361` `agent_ip` — **PC NIC에 직접 설정할 값** |
+| GW / 마스크 | `192.168.1.1` / `255.255.255.0` | `sac3.cpp:364-365` |
 | 워크스페이스 | `~/ros2_ws` 하나 | 에이전트·트레이너 공용 |
 
-값을 바꾸려면 [`setup/config.env`](setup/config.env)와 **펌웨어 양쪽을** 고쳐야 한다. 설정 파일만 고치면 펌웨어는 여전히 옛 주소로 쏜다.
+펌웨어 쪽은 전부 **컴파일 시점에 박히는 값**이다. 바꾸려면 `sac3.cpp`를 고쳐 다시
+플래시해야 하고, `setup/config.env`만 고치면 스크립트와 검사 도구만 새 값을 보게 되어
+오히려 어긋난다.
+
+값을 바꾸려면 [`setup/config.env`](setup/config.env)와 **펌웨어 양쪽을** 고쳐야 한다.
 
 ---
 
 ## 1. 빠른 경로
+
+전체는 네 단계다. 설치만 스크립트가 하고, 나머지 셋은 직접 한다.
+
+| | 단계 | 하는 곳 | 절 |
+|---|---|---|---|
+| ① | 저장소 받기 + `./setup.sh` | 터미널 | 1절 |
+| ② | PC NIC에 고정 IP | 설정 또는 터미널 | 3절 |
+| ③ | 펌웨어 업로드 | VSCode 또는 터미널 | 4절 |
+| ④ | 에이전트 + 학습 실행 | 터미널 3개 | 5절 |
 
 ```bash
 # 경로 A — git (권장)
@@ -49,7 +62,9 @@ unzip mROS-main.zip && cd mROS-main/setup && chmod +x *.sh
 ./setup.sh
 ```
 
-STEP 0~8에 해당하는 설치가 전부 여기 들어 있다(기본 패키지·로케일·ROS 2 Jazzy·colcon·LibTorch·PlatformIO·에이전트·트레이너·셸 환경). 재실행해도 안전하며, 이미 된 단계는 건너뛴다.
+기본 패키지·로케일·ROS 2 Jazzy·colcon·LibTorch·PlatformIO·VSCode 확장·micro-ROS 에이전트·트레이너·셸 환경이 전부 여기 들어 있다. 8단계로 나뉘어 있고 **재실행해도 안전하다** — 이미 된 단계는 건너뛴다.
+
+처음 실행은 오래 걸린다. LibTorch 500MB 다운로드와 micro-ROS 에이전트 빌드가 대부분을 차지한다.
 
 ```bash
 # 단계 목록 / 일부만 다시
@@ -83,7 +98,7 @@ STEP 0~8에 해당하는 설치가 전부 여기 들어 있다(기본 패키지�
 | `trainer` | 저장소의 `trainer/sac_trainer_cpp`를 `~/ros2_ws/src/`로 복사 후 colcon 빌드 | 트레이너가 이 저장소 안에 있으므로 별도 clone이 필요 없다 |
 | `shell` | `.bashrc` 블록, `rsrl` alias, venv | venv는 **실행용**이지 빌드용이 아니다. 그래서 마지막에 온다 |
 
-두 가지를 짚어둔다.
+네 가지를 짚어둔다. 전부 이 스택에서 실제로 사람을 붙잡았던 지점이다.
 
 **venv를 먼저 만들지 않는다.** `rsrl` venv는 학습 실행에만 쓴다. 빌드를 venv 안에서 하면 `colcon: command not found`가 난다. 스크립트는 venv가 켜진 상태로 실행되면 아예 거부한다.
 
@@ -274,3 +289,26 @@ ros2 topic echo /policy_ack              # 5. 트레이너 기동 후 가중치 
 | 트레이너가 별도 비공개 저장소 | `trainer/sac_trainer_cpp/`로 합침 |
 | VSCode 업로드 안내 없음 | 4절에 VSCode 절 추가 |
 | `CMakeLists.txt`가 `set(CMAKE_PREFIX_PATH ...)`로 덮어써 `LIBTORCH_DIR` 설정이 무시됨 | `list(APPEND ...)`로 수정 |
+
+---
+
+## 부록. 이 매뉴얼의 검증 상태
+
+깨끗한 Ubuntu 24.04 머신이 없어 전 과정을 한 번에 통과시켜 본 것은 아니다.
+어디까지 실제로 확인했는지 밝혀둔다.
+
+| 항목 | 상태 |
+|---|---|
+| 저장소 clone → `trainer` → `shell` | **실행 확인.** 새 clone에서 격리 HOME으로 완주(`dual_sac`, `hilh` 생성) |
+| `libtorch` 단계 | **실행 확인.** 500MB 실제 다운로드 후 `2.4.0+cpu` 압축 해제 |
+| `vscode` 단계 | **실행 확인.** 확장 설치·건너뜀 양쪽 경로 |
+| `shell` 단계 멱등성 | **실행 확인.** 두 번 돌려 `.bashrc` 블록 1개 유지 |
+| 단계별 전제 검사 | **실행 확인.** 도구를 숨긴 PATH에서 정확한 메시지로 중단 |
+| `ros` 단계의 다운로드 경로 | **부분 확인.** 버전 조회(1.2.0) → deb URL(HTTP 200) → 패키지 가용성까지. `apt-get install` 실행 자체는 미확인 |
+| `base` 단계 | **미확인.** 이 머신에 이미 설치돼 건너뛴다 |
+| `agent` 단계 | **미확인.** `build_agent.sh`가 20분 이상이라 재실행하지 않음 |
+| 펌웨어 빌드 | **실행 확인.** `firmware.hex` 생성, `transport custom` 적용 |
+| Teensy 업로드 / 학습 실행 | **미확인.** 하드웨어 필요 |
+
+즉 첫 실행에서 눈여겨볼 곳은 `base`·`ros`의 apt 설치와 `agent` 빌드,
+그리고 실제 업로드다. 나머지는 실행으로 확인됐다.
