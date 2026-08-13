@@ -31,6 +31,19 @@
 
 값을 바꾸려면 [`setup/config.env`](setup/config.env)와 **펌웨어 양쪽을** 고쳐야 한다.
 
+### 어느 폴더가 어디로 가나
+
+클론한 뒤 **대부분은 제자리에서 쓴다.** 다른 곳으로 가는 건 트레이너 하나뿐이다.
+
+| 폴더 | 목적지 |
+|---|---|
+| `setup/` | 이동 없음 — 여기서 `./setup.sh` 실행 |
+| `firmware/` | 이동 없음 — VSCode로 **이 폴더**를 연다 |
+| `ros2_ws/src/sac_trainer_cpp/` | **→ `~/ros2_ws/src/`** (`setup.sh trainer`가 복사) |
+| `examples/` | 이동 없음 — 참고용, 설치에 불필요 |
+
+저장소의 `ros2_ws/`는 목적지 경로를 그대로 따른 이름이다. 클론 위치는 어디든 상관없다.
+
 ---
 
 ## 1. 빠른 경로
@@ -95,7 +108,7 @@ unzip mROS-main.zip && cd mROS-main/setup && chmod +x *.sh
 | `platformio` | PlatformIO, udev 규칙, `dialout`/`plugdev` | Teensy 업로드에 USB 접근 권한이 필요하다 |
 | `vscode` | PlatformIO IDE 확장 설치 | VSCode가 없으면 안내만 하고 넘어간다(터미널로도 업로드 가능) |
 | `agent` | `micro_ros_setup` → `create_agent_ws.sh` → `build_agent.sh` | `micro_ros_agent`는 XRCE-DDS 엔진을 별도 패키지로 찾는다. `micro-ROS-Agent` 저장소만 clone하면 엔진이 없어 `find_package`에서 멈춘다 |
-| `trainer` | 저장소의 `trainer/sac_trainer_cpp`를 `~/ros2_ws/src/`로 복사 후 colcon 빌드 | 트레이너가 이 저장소 안에 있으므로 별도 clone이 필요 없다 |
+| `trainer` | `ros2_ws/src/sac_trainer_cpp`를 `~/ros2_ws/src/`로 복사 후 colcon 빌드 | 저장소 안 경로가 목적지 경로와 같다 |
 | `shell` | `.bashrc` 블록, `rsrl` alias, venv | venv는 **실행용**이지 빌드용이 아니다. 그래서 마지막에 온다 |
 
 네 가지를 짚어둔다. 전부 이 스택에서 실제로 사람을 붙잡았던 지점이다.
@@ -109,7 +122,7 @@ unzip mROS-main.zip && cd mROS-main/setup && chmod +x *.sh
 
 **`.bashrc`는 마커 블록으로 관리된다.** 손으로 append 하면 재실행할 때마다 `LD_LIBRARY_PATH`가 중복으로 쌓인다. 스크립트는 `# >>> rsrl stack ... >>>` 블록을 통째로 갈아끼운다.
 
-**트레이너는 이 저장소 안에 있다.** `trainer/sac_trainer_cpp/`가 정본이고, `trainer` 단계가 이를 `~/ros2_ws/src/`로 복사해 빌드한다. 코드를 고칠 때는 저장소 쪽을 고치고 `./setup.sh trainer`를 다시 돌린다.
+**트레이너는 이 저장소 안에 있다.** `ros2_ws/src/sac_trainer_cpp/`가 정본이고, `trainer` 단계가 이를 `~/ros2_ws/src/`로 복사해 빌드한다. 코드를 고칠 때는 저장소 쪽을 고치고 `./setup.sh trainer`를 다시 돌린다.
 
 ---
 
@@ -139,11 +152,11 @@ Teensy를 USB로 연결하고, 이더넷도 함께 물려둔다.
 
 ### VSCode (권장)
 
-**여는 폴더는 저장소 루트가 아니라 `Projects/mROS`다.** PlatformIO는 `platformio.ini`가
+**여는 폴더는 저장소 루트가 아니라 `firmware/`다.** PlatformIO는 `platformio.ini`가
 있는 폴더를 프로젝트로 인식한다. 루트를 열면 프로젝트를 못 찾아 툴바가 나타나지 않는다.
 
 ```bash
-code Projects/mROS
+code firmware
 ```
 
 1. 왼쪽 사이드바에 **개미 머리 아이콘**(PlatformIO)이 생기고, 하단에 파란 상태바가 뜬다.
@@ -161,7 +174,7 @@ code Projects/mROS
 ### 터미널
 
 ```bash
-cd Projects/mROS
+cd firmware
 pio run -e teensy41 -t upload
 ```
 
@@ -268,7 +281,7 @@ ros2 topic echo /policy_ack              # 5. 트레이너 기동 후 가중치 
 | Teensy 업로드 권한 거부 | 그룹이 세션에 미적용 | **로그아웃 → 재로그인**. 터미널만 닫으면 안 된다 |
 | 에이전트는 붙는데 토픽이 안 보임 | 도메인 불일치 | `echo $ROS_DOMAIN_ID` → 121 |
 | `ping` 실패 | PC NIC IP 불일치 | 3절 (`192.168.1.12/24`) |
-| `rclc pull failed` / `Aborting` | micro-ROS 저장소 캐시 충돌 | `cd Projects/mROS && pio run -t clean_microros` 후 재빌드 |
+| `rclc pull failed` / `Aborting` | micro-ROS 저장소 캐시 충돌 | `cd firmware && pio run -t clean_microros` 후 재빌드 |
 | `file INSTALL cannot find lib*.a` | micro-ROS 라이브러리 빌드 레이스 | `pio run`을 한 번 더. 대개 이어서 통과한다 |
 
 ---
@@ -277,7 +290,7 @@ ros2 topic echo /policy_ack              # 5. 트레이너 기동 후 가중치 
 
 | 이전 | 현재 |
 |---|---|
-| `Projects/StTn` | `Projects/mROS` |
+| `Projects/StTn` | `firmware/` |
 | `sac3.cpp`가 `lib/`에 있어 `ln -sf` 심링크 필요 | `src/sac3.cpp`에 있음 — 심링크 불필요 |
 | `pio run -e baseline -t upload` | `pio run -e teensy41 -t upload` |
 | `-e e0_eigen` / `-e e0_forloop` 백엔드 | 해당 env 제거 (참조하던 `e0_backends.cpp`가 존재하지 않았음) |
@@ -286,7 +299,7 @@ ros2 topic echo /policy_ack              # 5. 트레이너 기동 후 가중치 
 | 트랜스포트 지정 없음 (→ `serial`로 빌드) | `board_microros_transport = custom` |
 | STEP 0~8을 손으로 붙여넣기 | `./setup.sh` |
 | 첨부파일 3개 (`sac3.cpp`, `platformio.ini`, `sac_trainer_cpp.zip`) | 저장소 **1개** clone (트레이너 포함) |
-| 트레이너가 별도 비공개 저장소 | `trainer/sac_trainer_cpp/`로 합침 |
+| 트레이너가 별도 비공개 저장소 | `ros2_ws/src/sac_trainer_cpp/`로 합침 |
 | VSCode 업로드 안내 없음 | 4절에 VSCode 절 추가 |
 | `CMakeLists.txt`가 `set(CMAKE_PREFIX_PATH ...)`로 덮어써 `LIBTORCH_DIR` 설정이 무시됨 | `list(APPEND ...)`로 수정 |
 

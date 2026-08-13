@@ -90,8 +90,8 @@ preflight() {
 
   # 서브모듈은 예제 참고용일 뿐 설치에 필요 없다. zip 경로에선 비어 있는 게 정상이므로
   # 경고만 하고 진행한다.
-  if [[ -d "${REPO_ROOT}/micro_ros_arduino_examples_platformio" ]] \
-     && [[ -z "$(ls -A "${REPO_ROOT}/micro_ros_arduino_examples_platformio" 2>/dev/null)" ]]; then
+  if [[ -d "${REPO_ROOT}/examples" ]] \
+     && [[ -z "$(ls -A "${REPO_ROOT}/examples" 2>/dev/null)" ]]; then
     c_warn "예제 서브모듈이 비어 있다(zip으로 받으면 정상). 설치에는 영향 없다.
        필요하면: git submodule update --init"
   fi
@@ -271,7 +271,7 @@ phase_vscode() {
     c_ok "PlatformIO IDE 확장"
   fi
 
-  c_ok "VSCode 준비됨 — 열 폴더는 ${REPO_ROOT}/Projects/mROS (저장소 루트가 아니다)"
+  c_ok "VSCode 준비됨 — 열 폴더는 ${REPO_ROOT}/firmware (저장소 루트가 아니다)"
 }
 
 # --- 6. micro-ROS 에이전트 ----------------------------------------------------
@@ -317,7 +317,7 @@ phase_trainer() {
   src_ros "/opt/ros/${ROS_DISTRO_NAME}/setup.bash"
 
   # 트레이너 소스는 이 저장소 안에 있다. 별도 clone이 필요 없다.
-  local repo_src="${REPO_ROOT}/trainer/sac_trainer_cpp"
+  local repo_src="${REPO_ROOT}/ros2_ws/src/sac_trainer_cpp"
   local ws_src="${WORKSPACE}/src/sac_trainer_cpp"
 
   [[ -d "$repo_src" ]] || c_die "트레이너 소스가 없다: $repo_src

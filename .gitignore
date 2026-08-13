@@ -14,6 +14,6 @@
 Thumbs.db
 
 # 트레이너 런타임 출력 (scripts/ 안에 상대경로로 쌓인다)
-trainer/sac_trainer_cpp/scripts/episode_logs/
-trainer/sac_trainer_cpp/scripts/replay_buffers/
-trainer/sac_trainer_cpp/scripts/sac_checkpoints/
+ros2_ws/src/sac_trainer_cpp/scripts/episode_logs/
+ros2_ws/src/sac_trainer_cpp/scripts/replay_buffers/
+ros2_ws/src/sac_trainer_cpp/scripts/sac_checkpoints/
