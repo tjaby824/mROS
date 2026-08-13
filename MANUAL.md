@@ -238,6 +238,7 @@ ros2 topic echo /policy_ack              # 5. 트레이너 기동 후 가중치 
 |---|---|---|
 | `Configuring ... with transport serial` | `board_microros_transport` 누락 | `platformio.ini`에 `= custom` 추가 (4절) |
 | `colcon: command not found` | venv 안에 colcon 설치 | `deactivate` 후 `./setup.sh ros` |
+| `rosdep installation has not been initialized` | rosdep 캐시가 `$HOME/.ros`에 없음 | 스크립트가 자동 생성한다. 수동이면 `rosdep update` |
 | `git clone -b`이 엉뚱한 브랜치 | `$ROS_DISTRO` 비어 있음 | `source /opt/ros/jazzy/setup.bash` 먼저 |
 | `find_package(microxrcedds_agent)` 실패 | 에이전트를 수동 clone함 | `./setup.sh agent` (`micro_ros_setup` 경로) |
 | `find_package(Torch)` 실패 | LibTorch 경로 불일치 | `config.env`의 `LIBTORCH_DIR` 확인 후 `./setup.sh trainer` |

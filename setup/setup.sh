@@ -26,6 +26,16 @@ SUDO_PHASES=(base ros platformio)
 src_ros() { set +u; # shellcheck disable=SC1090
             source "$1"; set -u; }
 
+# rosdep 캐시는 시스템이 아니라 $HOME/.ros 아래에 있다. 그래서 ros 단계를 거치지 않고
+# agent/trainer 단계만 따로 돌리면 "rosdep installation has not been initialized"로
+# 죽는다. 캐시가 없을 때만 만들어 준다.
+ensure_rosdep() {
+  [[ -d "$HOME/.ros/rosdep/sources.cache" ]] && return 0
+  echo "  rosdep 캐시가 없다. 생성한다 (처음 한 번, 네트워크 필요)..."
+  rosdep update --rosdistro "${ROS_DISTRO_NAME}" >/dev/null \
+    || c_die "rosdep update 실패. 네트워크를 확인하거나 './setup.sh ros'를 먼저 실행할 것."
+}
+
 # --- 출력 -------------------------------------------------------------------
 c_ok()   { printf '\033[32m  ✓ %s\033[0m\n' "$*"; }
 c_skip() { printf '\033[90m  · %s (이미 됨, 건너뜀)\033[0m\n' "$*"; }
@@ -258,6 +268,7 @@ phase_agent() {
       https://github.com/micro-ROS/micro_ros_setup.git src/micro_ros_setup
   fi
 
+  ensure_rosdep
   rosdep install --from-paths src --ignore-src -y >/dev/null
   colcon build --packages-select micro_ros_setup
   src_ros install/local_setup.bash
@@ -294,6 +305,7 @@ phase_trainer() {
   [[ -d "$ws_src/scripts" ]] || c_die "$ws_src/scripts/ 가 없다. 저장소가 온전한지 확인할 것."
 
   cd "${WORKSPACE}"
+  ensure_rosdep
   rosdep install --from-paths src --ignore-src -y >/dev/null
   rm -rf build/sac_trainer_cpp install/sac_trainer_cpp
   colcon build --symlink-install --packages-select sac_trainer_cpp \
