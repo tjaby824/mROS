@@ -26,6 +26,27 @@ SUDO_PHASES=(base ros platformio)
 src_ros() { set +u; # shellcheck disable=SC1090
             source "$1"; set -u; }
 
+# 단계를 따로 실행해도 그 단계가 쓰는 명령이 있어야 한다. base 단계가 깔아주는
+# 도구(curl, add-apt-repository, wget, unzip)를 뒤 단계가 먼저 쓰기 때문에,
+# ./setup.sh ros 처럼 단독 실행하면 깨끗한 머신에서 엉뚱한 곳에서 죽는다.
+# 인자는 "명령:패키지" 쌍.
+need_cmds() {
+  local missing=() pair cmd pkg
+  for pair in "$@"; do
+    cmd="${pair%%:*}"; pkg="${pair##*:}"
+    command -v "$cmd" >/dev/null 2>&1 || missing+=("$pkg")
+  done
+  [[ ${#missing[@]} -eq 0 ]] && return 0
+
+  if [[ "${SUDO_OK:-0}" == "1" ]]; then
+    c_warn "빠진 도구를 설치한다: ${missing[*]}"
+    sudo apt-get install -y -qq "${missing[@]}"
+  else
+    c_die "이 단계에 필요한 도구가 없다: ${missing[*]}
+       먼저 기본 패키지를 설치할 것:  ./setup.sh base"
+  fi
+}
+
 # rosdep 캐시는 시스템이 아니라 $HOME/.ros 아래에 있다. 그래서 ros 단계를 거치지 않고
 # agent/trainer 단계만 따로 돌리면 "rosdep installation has not been initialized"로
 # 죽는다. 캐시가 없을 때만 만들어 준다.
@@ -87,6 +108,7 @@ preflight() {
     command -v sudo >/dev/null || c_die "sudo가 없다."
     echo "sudo 권한을 미리 확인한다 (설치 중 암호 재입력을 피하기 위함)"
     sudo -v || c_die "sudo 인증 실패."
+    SUDO_OK=1
   fi
 }
 
@@ -114,6 +136,8 @@ phase_base() {
 # --- 2. ROS 2 + 빌드 툴체인 ---------------------------------------------------
 phase_ros() {
   c_step "2/8  ROS 2 ${ROS_DISTRO_NAME} 와 빌드 툴체인"
+
+  need_cmds curl:curl add-apt-repository:software-properties-common
 
   if [[ -d "/opt/ros/${ROS_DISTRO_NAME}" ]]; then
     c_skip "ROS 2 ${ROS_DISTRO_NAME}"
@@ -162,6 +186,8 @@ phase_ros() {
 phase_libtorch() {
   c_step "3/8  LibTorch ${LIBTORCH_VERSION} (CPU, cxx11-ABI)"
 
+  need_cmds wget:wget unzip:unzip
+
   # sac_trainer_cpp/CMakeLists.txt가 CMAKE_PREFIX_PATH를 $HOME/libtorch로
   # 고정한다. 다른 경로에 풀면 find_package(Torch)가 실패한다.
   if [[ -f "${LIBTORCH_DIR}/build-version" ]]; then
@@ -187,6 +213,8 @@ phase_libtorch() {
 # --- 4. PlatformIO + 장치 권한 ------------------------------------------------
 phase_platformio() {
   c_step "4/8  PlatformIO 와 USB 장치 권한"
+
+  need_cmds curl:curl python3:python3
 
   if [[ -x "$HOME/.platformio/penv/bin/pio" ]]; then
     c_skip "PlatformIO"
@@ -257,6 +285,7 @@ phase_agent() {
     return
   fi
 
+  need_cmds git:git
   mkdir -p "${WORKSPACE}/src"
   cd "${WORKSPACE}"
 

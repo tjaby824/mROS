@@ -87,6 +87,11 @@ STEP 0~8에 해당하는 설치가 전부 여기 들어 있다(기본 패키지�
 
 **venv를 먼저 만들지 않는다.** `rsrl` venv는 학습 실행에만 쓴다. 빌드를 venv 안에서 하면 `colcon: command not found`가 난다. 스크립트는 venv가 켜진 상태로 실행되면 아예 거부한다.
 
+**단계를 따로 돌려도 된다.** `ros`는 `curl`과 `add-apt-repository`를, `libtorch`는
+`wget`과 `unzip`을 쓰는데 이들은 `base`가 깔아준다. 각 단계가 자기 전제를 먼저 확인해
+빠진 게 있으면 무엇이 없는지 이름을 대며 멈춘다(sudo가 이미 확인된 단계에서는 바로 설치한다).
+`rosdep` 캐시도 `$HOME/.ros`에 있어 마찬가지라, 필요하면 그 자리에서 만든다.
+
 **`.bashrc`는 마커 블록으로 관리된다.** 손으로 append 하면 재실행할 때마다 `LD_LIBRARY_PATH`가 중복으로 쌓인다. 스크립트는 `# >>> rsrl stack ... >>>` 블록을 통째로 갈아끼운다.
 
 **트레이너는 이 저장소 안에 있다.** `trainer/sac_trainer_cpp/`가 정본이고, `trainer` 단계가 이를 `~/ros2_ws/src/`로 복사해 빌드한다. 코드를 고칠 때는 저장소 쪽을 고치고 `./setup.sh trainer`를 다시 돌린다.
@@ -239,6 +244,7 @@ ros2 topic echo /policy_ack              # 5. 트레이너 기동 후 가중치 
 | `Configuring ... with transport serial` | `board_microros_transport` 누락 | `platformio.ini`에 `= custom` 추가 (4절) |
 | `colcon: command not found` | venv 안에 colcon 설치 | `deactivate` 후 `./setup.sh ros` |
 | `rosdep installation has not been initialized` | rosdep 캐시가 `$HOME/.ros`에 없음 | 스크립트가 자동 생성한다. 수동이면 `rosdep update` |
+| `이 단계에 필요한 도구가 없다: ...` | 단계를 건너뛰고 뒤 단계만 실행함 | `./setup.sh base` 먼저 |
 | `git clone -b`이 엉뚱한 브랜치 | `$ROS_DISTRO` 비어 있음 | `source /opt/ros/jazzy/setup.bash` 먼저 |
 | `find_package(microxrcedds_agent)` 실패 | 에이전트를 수동 clone함 | `./setup.sh agent` (`micro_ros_setup` 경로) |
 | `find_package(Torch)` 실패 | LibTorch 경로 불일치 | `config.env`의 `LIBTORCH_DIR` 확인 후 `./setup.sh trainer` |
